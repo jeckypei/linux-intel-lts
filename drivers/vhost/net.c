@@ -496,8 +496,10 @@ signal_used:
 
 static int sock_has_rx_data(struct socket *sock)
 {
-	if (unlikely(!sock))
+	if (unlikely(!sock)) {
+		printk("%s: sock null\n",__func__);
 		return 0;
+	}
 
 	if (sock->ops->peek_len)
 		return sock->ops->peek_len(sock);
@@ -531,8 +533,10 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 	 * use mutex_lock() here since we could not guarantee a
 	 * consistenet lock ordering.
 	 */
-	if (!mutex_trylock(&vq->mutex))
+	if (!mutex_trylock(&vq->mutex)) {
+		printk("%s:%d mutex trylock fail\n",__func__, __line__);
 		return;
+	}
 
 	vhost_disable_notify(&net->dev, vq);
 	sock = vhost_vq_get_backend(rvq);
@@ -627,8 +631,10 @@ static int get_tx_bufs(struct vhost_net *net,
 
 	ret = vhost_net_tx_get_vq_desc(net, nvq, out, in, msg, busyloop_intr);
 
-	if (ret < 0 || ret == vq->num)
+	if (ret < 0 || ret == vq->num) {
+		printk("%s:%d ret:%d\n",__func__, __line__, ret );
 		return ret;
+	}
 
 	if (*in) {
 		vq_err(vq, "Unexpected descriptor format for TX: out %d, int %d\n",
@@ -791,8 +797,10 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		head = get_tx_bufs(net, nvq, &msg, &out, &in, &len,
 				   &busyloop_intr);
 		/* On error, stop handling until the next kick. */
-		if (unlikely(head < 0))
+		if (unlikely(head < 0)) {
+			printk("%s:%d head < 0 :%d\n",__func__, __line__, head );
 			break;
+		}
 		/* Nothing new?  Wait for eventfd to tell us they refilled. */
 		if (head == vq->num) {
 			if (unlikely(busyloop_intr)) {
@@ -813,6 +821,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		if (sock_can_batch) {
 			err = vhost_net_build_xdp(nvq, &msg.msg_iter);
 			if (!err) {
+				printk("%s:%d err:%d\n",__func__, __line__, err );
 				goto done;
 			} else if (unlikely(err != -ENOSPC)) {
 				vhost_tx_batch(net, nvq, sock, &msg);
@@ -836,6 +845,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 
 		err = sock->ops->sendmsg(sock, &msg, len);
 		if (unlikely(err < 0)) {
+			printk("%s:%d err:%d\n",__func__, __line__, err );
 			if (err == -EAGAIN || err == -ENOMEM || err == -ENOBUFS) {
 				vhost_discard_vq_desc(vq, 1);
 				vhost_net_enable_vq(net, vq);
@@ -966,11 +976,15 @@ static void handle_tx(struct vhost_net *net)
 
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_TX);
 	sock = vhost_vq_get_backend(vq);
-	if (!sock)
+	if (!sock) {
+		printk("%s:%d sock null \n",__func__, __line__ );
 		goto out;
+	}
 
-	if (!vq_meta_prefetch(vq))
+	if (!vq_meta_prefetch(vq)) {
+		printk("%s:%d vq_meta_prefetch fail \n",__func__, __line__ );
 		goto out;
+	}
 
 	vhost_disable_notify(&net->dev, vq);
 	vhost_net_disable_vq(net, vq);
@@ -1056,17 +1070,21 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	while (datalen > 0 && headcount < quota) {
 		if (unlikely(seg >= UIO_MAXIOV)) {
+			printk("%s:%d seg:%d > UIO_MAXIOV \n",__func__, __line__, seg );
 			r = -ENOBUFS;
 			goto err;
 		}
 		r = vhost_get_vq_desc(vq, vq->iov + seg,
 				      ARRAY_SIZE(vq->iov) - seg, &out,
 				      &in, log, log_num);
-		if (unlikely(r < 0))
+		if (unlikely(r < 0)) {
+			printk("%s:%d vhost_get_vq_desc err, r:%d \n",__func__, __line__, r );
 			goto err;
+		}
 
 		d = r;
 		if (d == vq->num) {
+			printk("%s:%d d == vq->num, d:%d \n",__func__, __line__, d );
 			r = 0;
 			goto err;
 		}
@@ -1094,6 +1112,7 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	/* Detect overrun */
 	if (unlikely(datalen > 0)) {
+		printk("%s:%d datalen > 0 datalen:%d \n",__func__, __line__, datalen);
 		r = UIO_MAXIOV + 1;
 		goto err;
 	}
@@ -1135,11 +1154,15 @@ static void handle_rx(struct vhost_net *net)
 
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_RX);
 	sock = vhost_vq_get_backend(vq);
-	if (!sock)
+	if (!sock) {
+		printk("%s:%d sock null \n",__func__, __line__);
 		goto out;
+	}
 
-	if (!vq_meta_prefetch(vq))
+	if (!vq_meta_prefetch(vq)) {
+		printk("%s:%d vq_meta_prefetch fail \n",__func__, __line__);
 		goto out;
+	}
 
 	vhost_disable_notify(&net->dev, vq);
 	vhost_net_disable_vq(net, vq);
@@ -1154,18 +1177,23 @@ static void handle_rx(struct vhost_net *net)
 	do {
 		sock_len = vhost_net_rx_peek_head_len(net, sock->sk,
 						      &busyloop_intr);
-		if (!sock_len)
+		if (!sock_len) {
+			printk("%s:%d sock_len 0  \n",__func__, __line__);
 			break;
+		}
 		sock_len += sock_hlen;
 		vhost_len = sock_len + vhost_hlen;
 		headcount = get_rx_bufs(vq, vq->heads + nvq->done_idx,
 					vhost_len, &in, vq_log, &log,
 					likely(mergeable) ? UIO_MAXIOV : 1);
 		/* On error, stop handling until the next kick. */
-		if (unlikely(headcount < 0))
+		if (unlikely(headcount < 0)) {
+			printk("%s:%d headcount < 0, headcount:%d fail \n",__func__, __line__,headcount);
 			goto out;
+		}
 		/* OK, now we need to know about added descriptors. */
 		if (!headcount) {
+			printk("%s:%d headcount == 0  \n",__func__, __line__);
 			if (unlikely(busyloop_intr)) {
 				vhost_poll_queue(&vq->poll);
 			} else if (unlikely(vhost_enable_notify(&net->dev, vq))) {
