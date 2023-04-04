@@ -227,11 +227,13 @@ int vhost_init_device_iotlb(struct vhost_dev *d, bool enabled);
 
 void vhost_iotlb_map_free(struct vhost_iotlb *iotlb,
 			  struct vhost_iotlb_map *map);
+#ifdef pr_debug
+#undef pr_debug
+#define pr_debug printk
+#endif
 
 #define vq_err(vq, fmt, ...) do {                                  \
-		pr_debug(pr_fmt(fmt), ##__VA_ARGS__);       \
-		if ((vq)->error_ctx)                               \
-				eventfd_signal((vq)->error_ctx, 1);\
+		printk(fmt, ##__VA_ARGS__);       \
 	} while (0)
 
 enum {
