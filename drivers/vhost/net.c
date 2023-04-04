@@ -521,8 +521,10 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 	 * use mutex_lock() here since we could not guarantee a
 	 * consistenet lock ordering.
 	 */
-	if (!mutex_trylock(&vq->mutex))
+	if (!mutex_trylock(&vq->mutex)) {
+		printk("vhost_net_busy_poll: trylock fial return\n");
 		return;
+	}
 
 	vhost_disable_notify(&net->dev, vq);
 	sock = rvq->private_data;
@@ -621,8 +623,10 @@ static int get_tx_bufs(struct vhost_net *net,
 
 	ret = vhost_net_tx_get_vq_desc(net, nvq, out, in, msg, busyloop_intr);
 
-	if (ret < 0 || ret == vq->num)
+	if (ret < 0 || ret == vq->num) {
+		printk("get_tx_bufs: vhost_net_tx_get_vq_desc err, ret:%d\n", ret);
 		return ret;
+	}
 
 	if (*in) {
 		vq_err(vq, "Unexpected descriptor format for TX: out %d, int %d\n",
@@ -968,11 +972,15 @@ static void handle_tx(struct vhost_net *net)
 
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_TX);
 	sock = vq->private_data;
-	if (!sock)
+	if (!sock) {
+		printk("handle_tx vq->private_data null\n");
 		goto out;
+	}
 
-	if (!vq_iotlb_prefetch(vq))
+	if (!vq_iotlb_prefetch(vq)) {
+		printk("handle_tx vq_iotlb_prefetch fail\n");
 		goto out;
+	}
 
 	vhost_disable_notify(&net->dev, vq);
 	vhost_net_disable_vq(net, vq);
@@ -1058,17 +1066,21 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	while (datalen > 0 && headcount < quota) {
 		if (unlikely(seg >= UIO_MAXIOV)) {
+			printk("get_rx_bufs: seg >= UIO_MAXIOV err, set:%d\n", seg);
 			r = -ENOBUFS;
 			goto err;
 		}
 		r = vhost_get_vq_desc(vq, vq->iov + seg,
 				      ARRAY_SIZE(vq->iov) - seg, &out,
 				      &in, log, log_num);
-		if (unlikely(r < 0))
+		if (unlikely(r < 0)) {
+			printk("get_rx_bufs: r < 0 err, r:%d\n", r);
 			goto err;
+		}
 
 		d = r;
 		if (d == vq->num) {
+			printk("get_rx_bufs: d == vq->num err, d:%u\n", d);
 			r = 0;
 			goto err;
 		}
@@ -1096,6 +1108,7 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	/* Detect overrun */
 	if (unlikely(datalen > 0)) {
+		printk("get_rx_bufs:datalen > 0err, datalen:%d\n", datalen);
 		r = UIO_MAXIOV + 1;
 		goto err;
 	}
@@ -1137,11 +1150,15 @@ static void handle_rx(struct vhost_net *net)
 
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_RX);
 	sock = vq->private_data;
-	if (!sock)
+	if (!sock)  {
+		printk("handle_rx:vq->private_data NULL\n");
 		goto out;
+	}
 
-	if (!vq_iotlb_prefetch(vq))
+	if (!vq_iotlb_prefetch(vq)) {
+		printk("handle_rx:vq_iotlb_prefetch error\n")
 		goto out;
+	}
 
 	vhost_disable_notify(&net->dev, vq);
 	vhost_net_disable_vq(net, vq);
