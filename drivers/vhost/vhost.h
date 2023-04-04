@@ -225,6 +225,11 @@ ssize_t vhost_chr_write_iter(struct vhost_dev *dev,
 			     struct iov_iter *from);
 int vhost_init_device_iotlb(struct vhost_dev *d, bool enabled);
 
+#ifdef pr_debug
+#undef pr_debug
+#define pr_debug printk
+#endif
+
 #define vq_err(vq, fmt, ...) do {                                  \
 		printk(fmt, ##__VA_ARGS__);       \
 	} while (0)
